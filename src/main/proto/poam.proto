@@ -1,0 +1,47 @@
+syntax = "proto3";
+package poam;
+
+service VerifiableProcessingService {
+    rpc prove(ProveRequest) returns (ProveResponse);
+    rpc compose(CompositionRequest) returns (CompositionResponse);
+    rpc verify(VerifyRequest) returns (VerifyResponse);
+    rpc combined(CombinedRequest) returns (ProveResponse);
+}
+
+message Proof {
+    repeated uint32 image_id = 1;
+    bytes receipt = 2;
+}
+
+message CompositionRequest {
+    repeated Proof proof_chain = 1;
+}
+
+message CompositionResponse {
+    Proof proof_response = 1;
+    repeated Proof proof_chain = 2;
+}
+
+message ProveRequest {
+    repeated uint32 image_id = 1;
+    string method_payload = 2;
+    optional Proof previous_proof = 3;
+}
+
+message ProveResponse {
+    string public_output = 1;
+    Proof proof_response = 2;
+}
+
+message VerifyRequest {
+    Proof proof = 2;
+}
+
+message VerifyResponse {
+    bool is_valid_executed = 1;
+    string public_output = 2;
+}
+
+message CombinedRequest {
+    repeated string method_payload = 1;
+}
