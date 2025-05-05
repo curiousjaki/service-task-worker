@@ -12,6 +12,7 @@
           <zeebe:input source="=&#34;Add&#34;" target="operation" />
           <zeebe:input source="=5" target="a" />
           <zeebe:input source="=10" target="b" />
+          <zeebe:input source="=false" target="composition" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_1jgbima</bpmn:incoming>
@@ -24,6 +25,7 @@
           <zeebe:input source="=&#34;Mul&#34;" target="operation" />
           <zeebe:input source="=2" target="a" />
           <zeebe:input source="=4" target="b" />
+          <zeebe:input source="=true" target="composition" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_15ftffp</bpmn:incoming>

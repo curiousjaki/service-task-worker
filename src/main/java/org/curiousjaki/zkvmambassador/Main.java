@@ -188,7 +188,7 @@ public class Main {
 
         Map<String, Object> variables = activatedJob.getVariablesAsMap();
         Poam.ProveRequest request;
-        if (variables.containsKey("previous_proof")) {
+        if (variables.containsKey("composition") && (boolean) variables.get("composition")) {
             String previous_json = variables.get("previous_proof").toString();
             Poam.ProveResponse.Builder builder = Poam.ProveResponse.newBuilder();
             try {
@@ -204,7 +204,7 @@ public class Main {
                     .setPreviousProof(previousProof)
                     .build();
         } else {
-            System.out.println("Variable 'previous_public_output' is not available.");
+            System.out.println("Variable composition not set or false.");
              request = Poam.ProveRequest.newBuilder()
                     .addAllImageId(imageId)
                     .setMethodPayload(methodPayload)
