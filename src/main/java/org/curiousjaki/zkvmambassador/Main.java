@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.*;
 
 
+
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
@@ -28,10 +29,46 @@ public class Main {
             String public_outout = response.getPublicOutput();
             Poam.Proof proofResult = response.getProofResponse();
             // Create output variables
-            Map<String, Object> variables = new HashMap<>();
+            Map<String, Object> variables = job.getVariablesAsMap();
             variables.put("public_output", public_outout);
+
+            if (!variables.containsKey("proof_chain")) {
+                variables.put("proof_chain", new ArrayList<String>());
+            }
+
             try {
-                variables.put("previous_proof", JsonFormat.printer().print(response));
+                ((List<String>) variables.get("proof_chain")).add(JsonFormat.printer().print(response.getProofResponse()));
+                variables.put("previous_proof", JsonFormat.printer().print(response.getProofResponse()));
+            } catch (InvalidProtocolBufferException e) {
+                throw new RuntimeException(e);
+            }
+
+            // Complete job with new variables
+            client.newCompleteCommand(job.getKey())
+                    .variables(variables)
+                    .send()
+                    .join();
+        }
+    }
+    private static class ComposeJobHandler implements JobHandler {
+        @Override
+        public void handle(final JobClient client, final ActivatedJob job) {
+
+            // here: business logic that is executed with every job
+            Poam.CompositionResponse response = compose(job);
+            //String public_outout = response.getPublicOutput();
+            Poam.Proof proofResult = response.getProofResponse();
+            // Create output variables
+            Map<String, Object> variables = job.getVariablesAsMap();
+            //variables.put("public_output", public_outout);
+
+            if (!variables.containsKey("proof_chain")) {
+                variables.put("proof_chain", new ArrayList<String>());
+            }
+
+            try {
+                ((List<String>) variables.get("proof_chain")).add(JsonFormat.printer().print(response.getProofResponse()));
+                variables.put("previous_proof", JsonFormat.printer().print(response.getProofResponse()));
             } catch (InvalidProtocolBufferException e) {
                 throw new RuntimeException(e);
             }
@@ -65,14 +102,14 @@ public class Main {
         public void handle(final JobClient client, final ActivatedJob job) {
 
             // here: business logic that is executed with every job
-            Poam.ProveResponse response = combine(job);
+            Poam.ProveResponse response = single_step(job);
             String public_outout = response.getPublicOutput();
             Poam.Proof proofResult = response.getProofResponse();
             // Create output variables
             Map<String, Object> variables = new HashMap<>();
             variables.put("public_output", public_outout);
             try {
-                variables.put("previous_proof", JsonFormat.printer().print(response));
+                variables.put("previous_proof", JsonFormat.printer().print(response.getProofResponse()));
             } catch (InvalidProtocolBufferException e) {
                 throw new RuntimeException(e);
             }
@@ -114,6 +151,11 @@ public class Main {
                         .jobType("combine-job")
                         .handler(new CombineJobHandler())
                         .open();
+                final JobWorker composeWorker = client
+                        .newWorker()
+                        .jobType("compose-job")
+                        .handler(new ComposeJobHandler())
+                        .open()
         ) {
             System.out.println("Job workers opened and receiving jobs.");
 
@@ -145,16 +187,15 @@ public class Main {
         Poam.VerifyRequest request;
         if (variables.containsKey("previous_proof")) {
             String previous_json = variables.get("previous_proof").toString();
-            Poam.ProveResponse.Builder builder = Poam.ProveResponse.newBuilder();
+            Poam.Proof.Builder builder = Poam.Proof.newBuilder();
             try {
                 JsonFormat.parser().merge(previous_json, builder);
             } catch (InvalidProtocolBufferException e) {
                 throw new RuntimeException(e);
             }
-            Poam.ProveResponse parsed = builder.build();
-            Poam.Proof previousProof = parsed.getProofResponse();
+            Poam.Proof parsed = builder.build();
             request = Poam.VerifyRequest.newBuilder()
-                    .setProof(previousProof)
+                    .setProof(parsed)
                     .build();
         } else {
             System.out.println("Variable 'previous_public_output' is not available.");
@@ -190,18 +231,18 @@ public class Main {
         Poam.ProveRequest request;
         if (variables.containsKey("composition") && (boolean) variables.get("composition")) {
             String previous_json = variables.get("previous_proof").toString();
-            Poam.ProveResponse.Builder builder = Poam.ProveResponse.newBuilder();
+            Poam.Proof.Builder builder = Poam.Proof.newBuilder();
             try {
                 JsonFormat.parser().merge(previous_json, builder);
             } catch (InvalidProtocolBufferException e) {
                 throw new RuntimeException(e);
             }
-            Poam.ProveResponse parsed = builder.build();
-            Poam.Proof previousProof = parsed.getProofResponse();
+            Poam.Proof parsed = builder.build();
+            //Poam.Proof previousProof = parsed.getProofResponse();
             request = Poam.ProveRequest.newBuilder()
                     .addAllImageId(imageId)
                     .setMethodPayload(methodPayload)
-                    .setPreviousProof(previousProof)
+                    .setPreviousProof(parsed)
                     .build();
         } else {
             System.out.println("Variable composition not set or false.");
@@ -221,14 +262,14 @@ public class Main {
         channel.shutdown();
         return response;
     }
-    public static Poam.ProveResponse combine(ActivatedJob activatedJob){
+    public static Poam.ProveResponse single_step(ActivatedJob activatedJob){
         ManagedChannel channel = ManagedChannelBuilder
                 .forAddress("localhost", 50051)
                 .usePlaintext()  // Only for testing; don't use in production
                 .build();
         VerifiableProcessingServiceGrpc.VerifiableProcessingServiceBlockingStub stub =
                 VerifiableProcessingServiceGrpc.newBlockingStub(channel);
-        System.out.println("Working on Combined Request");
+        System.out.println("Working on SingleStep Request");
         Map<String, Object> variables = activatedJob.getVariablesAsMap();
         Poam.CombinedRequest request;
         if (variables.containsKey("method_payload")) {
@@ -245,6 +286,50 @@ public class Main {
 
         // Output the result
         System.out.println("Proving result: " + response.getPublicOutput());
+
+        // Shut down the channel
+        channel.shutdown();
+        return response;
+    }
+    public static Poam.CompositionResponse compose(ActivatedJob activatedJob){
+        ManagedChannel channel = ManagedChannelBuilder
+                .forAddress("localhost", 50051)
+                .usePlaintext()  // Only for testing; don't use in production
+                .build();
+        VerifiableProcessingServiceGrpc.VerifiableProcessingServiceBlockingStub stub =
+                VerifiableProcessingServiceGrpc.newBlockingStub(channel);
+        System.out.println("Working on SingleStep Request");
+        Map<String, Object> variables = activatedJob.getVariablesAsMap();
+        Poam.CompositionRequest request;
+        if (variables.containsKey("proof_chain")) {
+            // Step 1: read the strings
+            List<String> stringProofChain = (List<String>) variables.get("proof_chain");
+
+            // Step 2: parse them back into Poam.Proof objects
+            List<Poam.Proof> proofChain = new ArrayList<>();
+            for (String proofJson : stringProofChain) {
+                try {
+                    Poam.Proof.Builder builder = Poam.Proof.newBuilder();
+                    JsonFormat.parser().merge(proofJson, builder);
+                    proofChain.add(builder.build());
+                } catch (InvalidProtocolBufferException e) {
+                    throw new RuntimeException("Failed to parse proof from JSON: " + proofJson, e);
+                }
+            }
+
+            // Step 3: build the request
+            request = Poam.CompositionRequest.newBuilder()
+                    .addAllProofChain(proofChain)
+                    .build();
+        } else {
+            request = Poam.CompositionRequest.newBuilder().build();
+        }
+
+        // Make the call and receive the response
+        Poam.CompositionResponse response = stub.compose(request);
+
+        // Output the result
+        System.out.println("Proving result: " + response.getProofResponse());
 
         // Shut down the channel
         channel.shutdown();
