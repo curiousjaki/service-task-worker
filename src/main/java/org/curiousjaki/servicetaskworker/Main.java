@@ -1,4 +1,4 @@
-package org.curiousjaki.zkvmambassador;
+package org.curiousjaki.servicetaskworker;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import io.camunda.zeebe.client.ZeebeClient;
@@ -23,6 +23,7 @@ public class Main {
     private static class ProveJobHandler implements JobHandler {
         @Override
         public void handle(final JobClient client, final ActivatedJob job) {
+            System.out.println("Handle Prove Job");
 
             // here: business logic that is executed with every job
             Poam.ProveResponse response = prove(job);
@@ -53,7 +54,7 @@ public class Main {
     private static class ComposeJobHandler implements JobHandler {
         @Override
         public void handle(final JobClient client, final ActivatedJob job) {
-
+            System.out.println("Handle Compose Job");
             // here: business logic that is executed with every job
             Poam.CompositionResponse response = compose(job);
             //String public_outout = response.getPublicOutput();
@@ -83,7 +84,7 @@ public class Main {
     private static class VerifyJobHandler implements JobHandler {
         @Override
         public void handle(final JobClient client, final ActivatedJob job) {
-
+            System.out.println("Handle Verify Job");
             // here: business logic that is executed with every job
             Poam.VerifyResponse response = verify(job);
             Map<String, Object> variables = new HashMap<>();
@@ -100,7 +101,7 @@ public class Main {
     private static class CombineJobHandler implements JobHandler {
         @Override
         public void handle(final JobClient client, final ActivatedJob job) {
-
+            System.out.println("Handle Combine Job");
             // here: business logic that is executed with every job
             Poam.ProveResponse response = single_step(job);
             String public_outout = response.getPublicOutput();
@@ -124,37 +125,58 @@ public class Main {
 
     public static void main(String[] args) {
 
-        ZeebeClient client = ZeebeClient.newClientBuilder()
-                .gatewayAddress("localhost:26500")
-                .usePlaintext()
-                .defaultJobWorkerMaxJobsActive(1)
-                .build();
+        System.out.println(System.getenv("ZEEBE_ADDRESS"));
+        System.out.println(System.getenv("ZKVM_ADDRESS"));
+        ZeebeClient client;
 
-        client.newTopologyRequest().send().join();
+        while(true) {
+            try {
+                client = ZeebeClient.newClientBuilder()
+                        .gatewayAddress(System.getenv("ZEEBE_ADDRESS"))
+                        .usePlaintext()
+                        .defaultJobWorkerMaxJobsActive(1)
+                        .build();
+                System.out.println("Zeebe Connection is Ready");
+                client.newTopologyRequest().send().join();
+                break;
+            } catch (Exception e) {
+                System.out.println("Zeebe not ready, retrying in 20s...");
+                try{
+                    Thread.sleep(20000);
+                } catch (InterruptedException ex) {
+                    throw new RuntimeException(ex);
+                }
+
+            }
+        }
 
         System.out.println("Opening job worker.");
 
         try (
                 final JobWorker provingWorker = client
-                             .newWorker()
-                             .jobType("proving-job")
-                             .handler(new ProveJobHandler())
-                             .timeout(Duration.ofSeconds(1000))
-                             .open();
+                        .newWorker()
+                        .jobType("proving-job")
+                        .handler(new ProveJobHandler())
+                        .timeout(Duration.ofSeconds(1000))
+                        .name("proving-job-worker")
+                        .open();
                 final JobWorker verificationWorker = client
-                            .newWorker()
-                            .jobType("verify-job")
-                            .handler(new VerifyJobHandler())
-                            .open();
+                        .newWorker()
+                        .jobType("verify-job")
+                        .handler(new VerifyJobHandler())
+                        .name("verify-job-worker")
+                        .open();
                 final JobWorker combinedWorker = client
                         .newWorker()
                         .jobType("combine-job")
                         .handler(new CombineJobHandler())
+                        .name("combine-job-worker")
                         .open();
                 final JobWorker composeWorker = client
                         .newWorker()
                         .jobType("compose-job")
                         .handler(new ComposeJobHandler())
+                        .name("compose-job-worker")
                         .open()
         ) {
             System.out.println("Job workers opened and receiving jobs.");
@@ -177,7 +199,7 @@ public class Main {
 
     public static Poam.VerifyResponse verify(ActivatedJob activatedJob){
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("localhost", 50051)
+                .forAddress(System.getenv("ZKVM_ADDRESS"), 50051)
                 .usePlaintext()  // Only for testing; don't use in production
                 .build();
         VerifiableProcessingServiceGrpc.VerifiableProcessingServiceBlockingStub stub =
@@ -215,7 +237,7 @@ public class Main {
 
     public static Poam.ProveResponse prove(ActivatedJob activatedJob){
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("localhost", 50051)
+                .forAddress(System.getenv("ZKVM_ADDRESS"), 50051)
                 .usePlaintext()  // Only for testing; don't use in production
                 .build();
         VerifiableProcessingServiceGrpc.VerifiableProcessingServiceBlockingStub stub =
@@ -264,7 +286,7 @@ public class Main {
     }
     public static Poam.ProveResponse single_step(ActivatedJob activatedJob){
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("localhost", 50051)
+                .forAddress(System.getenv("ZKVM_ADDRESS"), 50051)
                 .usePlaintext()  // Only for testing; don't use in production
                 .build();
         VerifiableProcessingServiceGrpc.VerifiableProcessingServiceBlockingStub stub =
@@ -293,7 +315,7 @@ public class Main {
     }
     public static Poam.CompositionResponse compose(ActivatedJob activatedJob){
         ManagedChannel channel = ManagedChannelBuilder
-                .forAddress("localhost", 50051)
+                .forAddress(System.getenv("ZKVM_ADDRESS"), 50051)
                 .usePlaintext()  // Only for testing; don't use in production
                 .build();
         VerifiableProcessingServiceGrpc.VerifiableProcessingServiceBlockingStub stub =
