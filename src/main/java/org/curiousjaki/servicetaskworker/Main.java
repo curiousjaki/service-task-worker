@@ -136,7 +136,7 @@ public class Main {
                         .usePlaintext()
                         .defaultJobWorkerMaxJobsActive(1)
                         .build();
-                System.out.println("Zeebe Connection is Ready");
+
                 client.newTopologyRequest().send().join();
                 break;
             } catch (Exception e) {
@@ -149,7 +149,7 @@ public class Main {
 
             }
         }
-
+        System.out.println("Zeebe Connection is Ready");
         System.out.println("Opening job worker.");
 
         try (
