@@ -10,7 +10,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 
-FROM openjdk:23-jdk-slim
+FROM openjdk:23-jdk-slim-bookworm
 
 # Set the working directory inside the container
 WORKDIR /app

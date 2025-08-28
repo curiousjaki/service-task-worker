@@ -124,7 +124,6 @@ public class Main {
     }
 
     public static void main(String[] args) {
-
         System.out.println(System.getenv("ZEEBE_ADDRESS"));
         System.out.println(System.getenv("ZKVM_ADDRESS"));
         ZeebeClient client;
@@ -141,6 +140,7 @@ public class Main {
                 break;
             } catch (Exception e) {
                 System.out.println("Zeebe not ready, retrying in 20s...");
+                System.err.println(e);
                 try{
                     Thread.sleep(20000);
                 } catch (InterruptedException ex) {
@@ -152,38 +152,40 @@ public class Main {
         System.out.println("Zeebe Connection is Ready");
         System.out.println("Opening job worker.");
 
-        try (
-                final JobWorker provingWorker = client
-                        .newWorker()
-                        .jobType("proving-job")
-                        .handler(new ProveJobHandler())
-                        .timeout(Duration.ofSeconds(1000))
-                        .name("proving-job-worker")
-                        .open();
-                final JobWorker verificationWorker = client
-                        .newWorker()
-                        .jobType("verify-job")
-                        .handler(new VerifyJobHandler())
-                        .name("verify-job-worker")
-                        .open();
-                final JobWorker combinedWorker = client
-                        .newWorker()
-                        .jobType("combine-job")
-                        .handler(new CombineJobHandler())
-                        .name("combine-job-worker")
-                        .open();
-                final JobWorker composeWorker = client
-                        .newWorker()
-                        .jobType("compose-job")
-                        .handler(new ComposeJobHandler())
-                        .name("compose-job-worker")
-                        .open()
-        ) {
-            System.out.println("Job workers opened and receiving jobs.");
+        try {
+            final JobWorker provingWorker = client
+                    .newWorker()
+                    .jobType("proving-job")
+                    .handler(new ProveJobHandler())
+                    .timeout(Duration.ofSeconds(1000))
+                    .name("proving-job-worker")
+                    .open();
+            final JobWorker verificationWorker = client
+                    .newWorker()
+                    .jobType("verify-job")
+                    .handler(new VerifyJobHandler())
+                    .name("verify-job-worker")
+                    .open();
+            final JobWorker combinedWorker = client
+                    .newWorker()
+                    .jobType("combine-job")
+                    .handler(new CombineJobHandler())
+                    .name("combine-job-worker")
+                    .open();
+            final JobWorker composeWorker = client
+                    .newWorker()
+                    .jobType("compose-job")
+                    .handler(new ComposeJobHandler())
+                    .name("compose-job-worker")
+                    .open();
 
-            // run until System.in receives exit command
-            waitUntilSystemInput("exit");
+
+        } catch (Exception e) {
+            System.err.println(e);
         }
+        System.out.println("Job workers opened and receiving jobs.");
+        // run until System.in receives exit command
+        waitUntilSystemInput("exit");
 
     }
     private static void waitUntilSystemInput(final String exitCode) {
